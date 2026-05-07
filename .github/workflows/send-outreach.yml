@@ -1,0 +1,69 @@
+name: Draft Approved Outreach
+
+on:
+  schedule:
+    # 10:00 IST = 04:30 UTC, weekdays only (Mon-Fri)
+    - cron: "30 4 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max emails to send this run"
+        required: false
+        default: "20"
+      mode:
+        description: "draft (save to Gmail Drafts) or send (send directly)"
+        required: false
+        default: "draft"
+      dry_run:
+        description: "Dry run? (only used in send mode)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Draft / send approved emails
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MODE: ${{ github.event.inputs.mode }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          LIMIT: ${{ github.event.inputs.limit }}
+        run: |
+          # Default for scheduled runs: draft mode (safe), 20/day
+          M="${MODE:-draft}"
+          LIM="${LIMIT:-20}"
+          if [ "$M" = "draft" ]; then
+            python outreach.py --draft --limit $LIM
+          elif [ "${DRY_RUN:-false}" = "true" ]; then
+            python outreach.py --send --dry-run --limit $LIM
+          else
+            python outreach.py --send --limit $LIM
+          fi
+
+      - name: Commit log
+        run: |
+          git config user.name "lead-agent-bot"
+          git config user.email "bot@roshcreatives.local"
+          git add data/outreach.csv
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "outreach: send batch ($(date -u +%Y-%m-%d))"
+            git push
+          fi
