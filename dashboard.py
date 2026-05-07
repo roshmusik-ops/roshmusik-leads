@@ -32,9 +32,20 @@ LEADS_CSV = DATA_DIR / "leads.csv"
 PITCHES_CSV = DATA_DIR / "pitches.csv"
 OUTREACH_CSV = DATA_DIR / "outreach.csv"
 
-st.set_page_config(page_title=f"{BRAND['company']} — Lead Agent", layout="wide")
-st.title(f"� {BRAND['company']} — Music Lead Agent")
-st.caption(f"{BRAND['founder']} · {BRAND['phone']} · {BRAND['email']} · {BRAND['website']}")
+LOGO_URL = "https://unavatar.io/instagram/roshmusikofficial"
+
+st.set_page_config(
+    page_title=f"{BRAND['company']} — Lead Agent",
+    layout="wide",
+    page_icon=LOGO_URL,
+)
+
+_c1, _c2 = st.columns([1, 8])
+with _c1:
+    st.image(LOGO_URL, width=90)
+with _c2:
+    st.title(f"{BRAND['company']} — Music Lead Agent")
+    st.caption(f"{BRAND['founder']} · {BRAND['phone']} · {BRAND['email']} · {BRAND['website']}")
 
 tab1, tab2, tab3, tab4 = st.tabs(["📋 Leads", "✍️ Pitches", "✉️ Email Outreach", "💬 WhatsApp"])
 

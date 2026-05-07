@@ -23,9 +23,20 @@ DATA_DIR = Path(__file__).parent / "data"
 LEADS_CSV = DATA_DIR / "leads.csv"
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+MAILTO_RE = re.compile(r'mailto:([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})', re.I)
+# "info [at] domain [dot] com", "info(at)domain(dot)com", "info @ domain . com"
+OBFUSCATED_RE = re.compile(
+    r'([A-Za-z0-9._%+\-]+)\s*(?:\[at\]|\(at\)|@|\{at\})\s*'
+    r'([A-Za-z0-9.\-]+)\s*(?:\[dot\]|\(dot\)|\.|\{dot\})\s*([A-Za-z]{2,})',
+    re.I,
+)
+# Cloudflare email protection: data-cfemail="a1b2c3..."
+CF_RE = re.compile(r'data-cfemail="([0-9a-fA-F]+)"')
 CONTACT_PATHS = [
-    "", "contact", "contact-us", "contactus", "about", "about-us",
-    "reach-us", "reach", "get-in-touch", "support",
+    "", "contact", "contact-us", "contactus", "contact.html", "contact.php",
+    "about", "about-us", "reach-us", "reach", "get-in-touch", "gettouch",
+    "support", "connect", "connect-with-us", "work-with-us", "hire-us",
+    "enquiry", "enquiries", "info",
 ]
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -54,16 +65,42 @@ def fetch(url: str, timeout: int = 8) -> str:
         return ""
 
 
+def _decode_cfemail(hex_str: str) -> str:
+    try:
+        b = bytes.fromhex(hex_str)
+        key = b[0]
+        return "".join(chr(c ^ key) for c in b[1:])
+    except Exception:
+        return ""
+
+
 def extract_emails(html: str) -> list[str]:
     emails = set()
-    for m in EMAIL_RE.findall(html or ""):
-        e = m.lower().strip(".,;:")
-        domain = e.split("@", 1)[1] if "@" in e else ""
+    html = html or ""
+
+    def _add(raw: str):
+        e = raw.lower().strip(".,;:'\"")
+        if "@" not in e:
+            return
+        domain = e.split("@", 1)[1]
         if any(domain.endswith(d) for d in SKIP_DOMAINS):
-            continue
-        if e.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg")):
-            continue
+            return
+        if e.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf", ".zip")):
+            return
+        if len(e) > 80:
+            return
         emails.add(e)
+
+    for m in EMAIL_RE.findall(html):
+        _add(m)
+    for m in MAILTO_RE.findall(html):
+        _add(m)
+    for user, dom, tld in OBFUSCATED_RE.findall(html):
+        _add(f"{user}@{dom}.{tld}")
+    for hex_str in CF_RE.findall(html):
+        decoded = _decode_cfemail(hex_str)
+        if decoded:
+            _add(decoded)
     return sorted(emails)
 
 
